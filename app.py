@@ -34,6 +34,7 @@ if testing:
         raise ValueError("Problem with ./config/ settings")
 
 database_url = os.environ.get("database_url")
+print(database_url[0:10])
 key = os.environ.get("decryption_key")
 fernet = Fernet(key)
 

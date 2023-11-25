@@ -2,16 +2,20 @@ import os
 import io
 import pandas as pd
 from cryptography.fernet import Fernet
-from fastapi import FastAPI, Depends, HTTPException, status, Request,Security
-from fastapi.security import  HTTPBasic, HTTPBasicCredentials
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Security, Response
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-import sqlite3
-from sqlalchemy import create_engine
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 from base64 import b64decode
 
-testing = True
+
+
+testing = False
 
 security = HTTPBasic()
 
@@ -29,7 +33,7 @@ if testing:
     except:
         raise ValueError("Problem with ./config/ settings")
 
-# Fetch the key from environment variables
+database_url = os.environ.get("database_url")
 key = os.environ.get("decryption_key")
 fernet = Fernet(key)
 
@@ -43,34 +47,42 @@ decrypted_data = fernet.decrypt(encrypted_data)
 # Load decrypted data into DataFrame
 df = pd.read_parquet(io.BytesIO(decrypted_data))
 df = df.set_index("username").to_dict()["password"]
+print(df)
 
 
-def authenticate_user(username: str, password: str):
+async def authenticate_user(username: str, password: str):
+    print(username)
+    print(df.keys())
     if username in df.keys():
         if df[username] == password:
             return True
-    return False  
+    return False
 
-database_url = os.environ.get('database_url')
-def get_beaconchain_data_by_slot(day: int):
-    engine = create_engine(database_url)
-    df = pd.read_sql_query(f"SELECT * FROM slots_of_day_{day}", engine)
-    return df.to_json(orient="records")
+
+engine = create_async_engine(database_url, echo=True)
+AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+async def get_beaconchain_data_by_slot(day: int):
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(text(f"SELECT * FROM slots_of_day_{day}"))
+        df = pd.DataFrame(result.fetchall())
+        return df.to_json(orient="records")
+
 
 @app.get("/beaconchain/{day}")
 @limiter.limit("5/minute")
-async def get_beaconchain_slot(day: int, request: Request, credentials: HTTPBasicCredentials = Security(security)):
+async def get_beaconchain_slot(day: int, request: Request, credentials: HTTPBasicCredentials = Depends(security)):
     username = credentials.username
     password = credentials.password
 
-    if not authenticate_user(username, password):
+    if not await authenticate_user(username, password):
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
-    day_data = get_beaconchain_data_by_slot(day)
-    if len(day_data) < 1:
+    day_data = await get_beaconchain_data_by_slot(day)
+    if not day_data:
         raise HTTPException(status_code=404, detail="No data found for the given slot")
     return {"data": day_data}
-
 
 # Handling rate limit errors
 @app.exception_handler(RateLimitExceeded)

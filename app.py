@@ -15,7 +15,7 @@ from base64 import b64decode
 
 
 
-testing = True
+testing = False
 
 security = HTTPBasic()
 

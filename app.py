@@ -1,33 +1,30 @@
 import os
 import io
-import math
+import uvicorn
 import pandas as pd
 from cryptography.fernet import Fernet
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Security, Response
+from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware  # Importing SlowAPIMiddleware
-import asyncio
+from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
-from base64 import b64decode
-from slowapi.errors import RateLimitExceeded
-from starlette.responses import PlainTextResponse
-
 
 testing = False
 
 security = HTTPBasic()
 
+limiter = Limiter(key_func=get_remote_address)
 
 # Initialize FastAPI and Limiter
-limiter = Limiter(key_func=get_remote_address)
-app = FastAPI()
-app.state.limiter = limiter 
+app = FastAPI(title="DotPics Data API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
 
 
 if testing:
@@ -94,7 +91,7 @@ async def get_validator_by_index(index: int):
 
 
 @app.get("/beaconchain/{day}")
-@limiter.limit("1/minute")
+@limiter.limit("60/hour")
 async def get_beaconchain_slot(request: Request, day: int, credentials: HTTPBasicCredentials = Depends(security)):
     if not await authenticate_user(credentials.username, credentials.password):
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
@@ -106,7 +103,7 @@ async def get_beaconchain_slot(request: Request, day: int, credentials: HTTPBasi
 
 
 @app.get("/validator/{index}")
-@limiter.limit("5/minute")
+@limiter.limit("1/hour")
 async def get_validators(request: Request, index: int, credentials: HTTPBasicCredentials = Depends(security)):
     if not await authenticate_user(credentials.username, credentials.password):
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
@@ -118,5 +115,4 @@ async def get_validators(request: Request, index: int, credentials: HTTPBasicCre
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

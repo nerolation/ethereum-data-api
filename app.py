@@ -105,7 +105,7 @@ async def get_beaconchain_slot(request: Request, day: int, credentials: HTTPBasi
 
 
 @app.get("/validator/{index}")
-@limiter.limit("1/hour")
+@limiter.limit("60/hour")
 async def get_validators(request: Request, index: int, credentials: HTTPBasicCredentials = Depends(security)):
     if not await authenticate_user(credentials.username, credentials.password):
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")

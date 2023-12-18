@@ -62,12 +62,9 @@ async def authenticate_user(username: str, password: str):
             return True
     return False
 
-def round_down_to_nearest_ten_thousand(number):
-    return math.floor(number / 10000) * 10000
-
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request, exc):
-    return PlainTextResponse(f"Rate limit exceeded. Please slow down to {str(exc)}", status_code=429)
+    return PlainTextResponse(f"Rate limit exceeded. Please slow down to 1 request per second", status_code=429)
 
 engine = create_async_engine(database_url, echo=True)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -109,7 +106,7 @@ async def get_beaconchain_slot(request: Request, day: int, credentials: HTTPBasi
 
 
 @app.get("/validator/{index}")
-@limiter.limit("1/minute")
+@limiter.limit("5/minute")
 async def get_validators(request: Request, index: int, credentials: HTTPBasicCredentials = Depends(security)):
     if not await authenticate_user(credentials.username, credentials.password):
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")

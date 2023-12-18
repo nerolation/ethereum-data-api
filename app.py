@@ -18,7 +18,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.responses import PlainTextResponse
 
 
-testing = True
+testing = False
 
 security = HTTPBasic()
 
